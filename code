@@ -1,0 +1,172 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+
+// ---------------------------
+// PIN CONFIGURATION
+// ---------------------------
+#define DHT_PIN 2
+#define DHT_TYPE DHT22
+
+// ---------------------------
+// DISPLAY CONFIGURATION
+// ---------------------------
+#define LCD_ADDRESS 0x27
+#define LCD_COLS 16
+#define LCD_ROWS 2
+
+// ---------------------------
+// TIMING CONFIGURATION
+// ---------------------------
+#define READING_INTERVAL 2000
+#define DISPLAY_UPDATE_INTERVAL 3000
+#define SERIAL_UPDATE_INTERVAL 5000
+
+// ---------------------------
+// GLOBAL OBJECTS
+// ---------------------------
+DHT dhtSensor(DHT_PIN, DHT_TYPE);
+LiquidCrystal_I2C lcdDisplay(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
+
+// ---------------------------
+// STRUCTURES
+// ---------------------------
+struct WeatherData {
+  float temperature;
+  float humidity;
+  bool isValid;
+};
+
+// ---------------------------
+// GLOBAL VARIABLES
+// ---------------------------
+unsigned long lastDisplayUpdate = 0;
+unsigned long lastSerialUpdate = 0;
+WeatherData currentWeather = {0.0, 0.0, false};
+
+// ---------------------------
+// FUNCTION PROTOTYPES
+// ---------------------------
+void initializeSystem();
+void updateSensorData();
+void updateDisplay();
+void updateSerialMonitor();
+void displayErrorMessage();
+void displayWelcomeMessage();
+void displayDataRow(int row, String label, float value, String unit);
+
+// ---------------------------
+// SETUP FUNCTION
+// ---------------------------
+void setup() {
+  Serial.begin(9600);
+  initializeSystem();
+}
+
+// ---------------------------
+// MAIN LOOP
+// ---------------------------
+void loop() {
+  updateSensorData();
+  
+  unsigned long currentTime = millis();
+  
+  if (currentTime - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+    if (currentWeather.isValid) {
+      updateDisplay();
+    } else {
+      displayErrorMessage();
+    }
+    lastDisplayUpdate = currentTime;
+  }
+  
+  if (currentTime - lastSerialUpdate >= SERIAL_UPDATE_INTERVAL) {
+    if (currentWeather.isValid) {
+      updateSerialMonitor();
+    }
+    lastSerialUpdate = currentTime;
+  }
+  
+  delay(READING_INTERVAL);
+}
+
+// ---------------------------
+// INITIALIZATION FUNCTIONS
+// ---------------------------
+void initializeSystem() {
+  lcdDisplay.init();
+  lcdDisplay.backlight();
+  displayWelcomeMessage();
+  
+  dhtSensor.begin();
+  
+  Serial.println("===================================");
+  Serial.println("   DHT22 WEATHER STATION v2.0     ");
+  Serial.println("===================================");
+}
+
+void displayWelcomeMessage() {
+  lcdDisplay.clear();
+  lcdDisplay.setCursor(0, 0);
+  lcdDisplay.print("WEATHER STATION");
+  lcdDisplay.setCursor(0, 1);
+  lcdDisplay.print("Initializing...");
+  delay(2000);
+  lcdDisplay.clear();
+}
+
+// ---------------------------
+// SENSOR FUNCTIONS
+// ---------------------------
+void updateSensorData() {
+  float humidity = dhtSensor.readHumidity();
+  float temperature = dhtSensor.readTemperature();
+  
+  currentWeather.humidity = humidity;
+  currentWeather.temperature = temperature;
+  currentWeather.isValid = !isnan(humidity) && !isnan(temperature);
+}
+
+// ---------------------------
+// DISPLAY FUNCTIONS
+// ---------------------------
+void updateDisplay() {
+  lcdDisplay.clear();
+  
+  displayDataRow(0, "Temp:", currentWeather.temperature, " C");
+  displayDataRow(1, "Humid:", currentWeather.humidity, " %");
+}
+
+void displayDataRow(int row, String label, float value, String unit) {
+  lcdDisplay.setCursor(0, row);
+  lcdDisplay.print(label);
+  
+  lcdDisplay.setCursor(6, row);
+  lcdDisplay.print(value, 1);
+  
+  lcdDisplay.setCursor(12, row);
+  lcdDisplay.print(unit);
+}
+
+void displayErrorMessage() {
+  lcdDisplay.clear();
+  lcdDisplay.setCursor(0, 0);
+  lcdDisplay.print("SENSOR ERROR");
+  lcdDisplay.setCursor(0, 1);
+  lcdDisplay.print("Check connection");
+}
+
+// ---------------------------
+// SERIAL MONITOR FUNCTIONS
+// ---------------------------
+void updateSerialMonitor() {
+  Serial.println("===================================");
+  Serial.print("Temperature: ");
+  Serial.print(currentWeather.temperature, 1);
+  Serial.println(" °C");
+  
+  Serial.print("Humidity:    ");
+  Serial.print(currentWeather.humidity, 1);
+  Serial.println(" %");
+  Serial.println("===================================");
+}
